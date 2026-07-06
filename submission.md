@@ -178,3 +178,4 @@ else:
     - Tested the ``GET http://127.0.0.1:5000/feed/<user_id>/listening-now`` endpoint again to check whether the recent listening now activity still showed activity in the 24 hour window and previous day, which none appeared.
 
 ## Git Log, Fix Commits
+<img width="911" height="587" alt="image" src="https://github.com/user-attachments/assets/450a400e-4042-42b0-9683-b65fcea0e9af" />
