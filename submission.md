@@ -1,3 +1,17 @@
+## AI Usage
+
+### Instance 1: Querying UIDs of Data
+
+- **What I directed AI to do**: Create scripts or commands to run in powershell that extracts the ids of users, songs, and playlists because they are newly generated from the seed data rather than hard-coded. I needed these ids to be able to test endpoints and reproduce the issues.
+
+### Instance 2: Bug Reproduction for Issue #1
+- **What I directed AI to do**: I asked how to approach this bug given that it is constrained to only Sundays. I initially wanted to test the endpoints and increase a streak, but the constraint of the bug being only on Sunday made it difficult. It explained that the issue is hard to reproduce with the API/endpoint unless I manually set my own system time to Sunday in UTC timezone which I didn't want to do. It also suggested to test using controlled/pre-defined datetimes as an alternative, which is where I looked at the test folders. 
+
+
+## Stretch Feature
+### Write a Regression Test
+- I wrote tests for the first issue where the listening streak resets on Sunday. One of the tests specifically added a song to the listen streak on every day of the week, which would have caught the Sunday reset.
+
 ## Codebase Map
 - ``app.py``: Creates and serves a Flask app, configured with SQLAlchemy ORM for database interactions and sets up the endpoint routes (outlined below)
 - ``models.py``: Defines the SQLAlchemy database schema and object relationships for the Mixtape app. There are 7 models and 3 association tables.
