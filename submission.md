@@ -55,6 +55,99 @@
         - ``streak(user_id)``: Handles ``GET /users/<user_id>/streak`` by calling ``get_streak``.
         - ``notifications(user_id)``: Handles ``GET /users/<user_id>/notifications`` by calling ``get_notifications`` and supporting ``unread_only=true``.
         - ``read_notification(notification_id)``: Handles ``POST /users/notifications/<notification_id>/read`` by calling ``mark_as_read``.
+- Tests: Simple PyTest scripts to test the service
+    - ``test_playlists.py``
+    - ``test_search.py``
+    - ``test_streaks.py``
 
 ### Example Data Flow
 - A user listens to a song: client sends request ``POST /songs/<song_id>/listen`` in ``routes/songs.py`` which calls ``streak_service.record_listening_event(user_id, song_id)`` from ``services/streak_service.py``. This creates a ``ListeningEvent`` record that stores which user (``user_id``) listened to which song (``song_id``) at what time (``listened_at``).
+
+## Bug Investigation Writeups
+
+### Issue 1: My listening streak keeps resetting
+- 
+
+#### Reproduction
+- What inputs, sequence of actions, or data condition triggered the behavior?
+    - A user whose last listen was Saturday and whose next listen happens on Sunday.
+    - Any valid ``song_id``.
+    - The live Flask route can only naturally reproduce this if the current system day is Sunday, because the route uses the real current system time.
+- What steps did you take to confirm the bug exists before touching any code?
+    1. I read over the ``test_streaks.py`` script and ran it to see which cases were outlined and handled correctly. All of the cases passed except for one where the streak is supposed to incremented on Sunday, which failed.  
+    2. To check using the Flask app, I added in the seed data, ran a script for all of the user_ids of the users and song_ids of the songs, and checked the result returned from ``/users/<user_id>`` to see which user last listened day was yesterday.
+    3. Since the Flask route depends on ``datetime.now(timezone.utc)``, I could not force the route to behave like it was Sunday unless the system date was actually Sunday and I didn't want want to convert it.
+    4. Instead, I extended the ``test_streaks.py`` script to confirm it was specifically just Sunday. I duplicated and extended a previous test from two consecutive days to six consecutive days, stopping right before Sunday, to check if the streak incrementing works on the other six days of the week.
+    5. I also made another test that tested the every day of the week consecutively (including Sunday).
+
+#### Finding the Root Cause
+- Which files did you look at? What was your navigation path?
+    1. ``routes/users.py`` for finding a user's streak information
+    2. ``services/streak_service.py`` to see the functions that handles streaks and to find where these functions are called. I saw that ``streak_service.record_listening_event()`` calls ``streak_service.update_listening_streak()``.
+    3. ``routes/songs.py`` to find when ``streak_service.record_listening_event()`` gets called and inspecting if any of the inputs were incorrect before checking the updating listening streak function. It also would let me test the endpoint myself on the Flask app.
+    4. Couldn't test the endpoint since it was conditional on real-life days or what the system clock says, so I checked the ``tests/test_streaks.py``.
+    4. Went back to ``services/streak_service.py`` to inspect the functions themselves, specifically ``streak_service.update_listening_streak()`` which was called in the tests.
+- What moment made you confident you'd found the right place, not just a suspicious area, but the specific cause?
+    - Once I saw that the test itself called the ``update_listening_streak`` function for testing the streak incrementing logic, I knew I found the right spot to start debugging. I checked the function itself to read over and understand what it was doing.
+
+#### Root Cause
+- In ``services/streak_service.py``, the ``update_listening_streak`` function has this code snippet for updating streak:
+```python
+if days_since_last == 0:
+    # Already updated today — no change needed
+    return
+elif days_since_last == 1 and today.weekday() != 6:
+    user.listening_streak += 1
+else:
+    user.listening_streak = 1
+```
+- The main thing to look at is the ``python elif days_since_last == 1 and today.weekday() != 6:``. Because of the second part of that conditional, whenever the day is Sunday (which returns 6 by today.weekday()), it won't increment the streak. Because of that, it goes into the else statement where streak gets reset to 1.
+
+#### Fix & Side-Effect Check
+- What did you change?
+    - I removed the second part of the conditional that checks if the weekday isn't Sunday.
+- Why does that change fix the root cause?
+    -  The streak should increase on every day of the week, including Sunday.
+- What related functionality did you check afterward to confirm you didn't break anything?
+    - I added two tests to make sure the simple cases of adding a listening event for a new User with ``streak_service.record_listening_event()``, which calls ``streak_service.update_listening_streak()`` still correctly increases the streak to 1 and calling it on the same day doesn't duplicate the increase.
+    - It's not possible to test with specific datetimes for ``streak_service.record_listening_event()`` as it grabs the datetime to pass into the streak updating function from the system time rather than getting it as input.
+    
+### Issue 2:  
+
+#### Reproduction
+- What steps did you take to confirm the bug exists before touching any code?
+- What inputs, sequence of actions, or data condition triggered the behavior?
+
+#### Finding the Root Cause
+- Which files did you look at?
+- What was your navigation path?
+- What moment made you confident you'd found the right place, not just a suspicious area, but the specific cause?
+
+#### Root Cause
+- In plain English, explain exactly what was wrong.
+- Do not just say "there was a bug in the streak logic"; explain the specific condition, comparison, or missing step that caused the problem.
+
+#### Fix & Side-Effect Check
+- What did you change?
+- Why does that change fix the root cause?
+- What related functionality did you check afterward to confirm you didn't break anything?
+
+### Issue 3:
+
+#### Reproduction
+- What steps did you take to confirm the bug exists before touching any code?
+- What inputs, sequence of actions, or data condition triggered the behavior?
+
+#### Finding the Root Cause
+- Which files did you look at?
+- What was your navigation path?
+- What moment made you confident you'd found the right place, not just a suspicious area, but the specific cause?
+
+#### Root Cause
+- In plain English, explain exactly what was wrong.
+- Do not just say "there was a bug in the streak logic"; explain the specific condition, comparison, or missing step that caused the problem.
+
+#### Fix & Side-Effect Check
+- What did you change?
+- Why does that change fix the root cause?
+- What related functionality did you check afterward to confirm you didn't break anything?
