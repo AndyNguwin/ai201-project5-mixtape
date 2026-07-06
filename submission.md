@@ -10,7 +10,7 @@
 
 ## Stretch Feature
 ### Write a Regression Test
-- I wrote tests for the first issue where the listening streak resets on Sunday. One of the tests specifically added a song to the listen streak on every day of the week, which would have caught the Sunday reset.
+- I wrote tests for the first issue where the listening streak resets on Sunday. One of the tests specifically added a song to the listen streak on every day of the week, which would have caught the Sunday reset. It is in ``tests/test_streaks.py`` as ``test_streak_increments_on_whole_week()``
 
 ## Codebase Map
 - ``app.py``: Creates and serves a Flask app, configured with SQLAlchemy ORM for database interactions and sets up the endpoint routes (outlined below)
