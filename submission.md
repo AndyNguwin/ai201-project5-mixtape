@@ -1,0 +1,60 @@
+## Codebase Map
+- ``app.py``: Creates and serves a Flask app, configured with SQLAlchemy ORM for database interactions and sets up the endpoint routes (outlined below)
+- ``models.py``: Defines the SQLAlchemy database schema and object relationships for the Mixtape app. There are 7 models and 3 association tables.
+    - Models
+        - ``User``: Stores account id, username, email, listening streak count, last listened date, creation time, and relationships to shared songs, ratings, listening events, notifications, playlists, and friends.
+        - ``Tag``: Stores unique tag names that can be attached to songs for categorization/search.
+        - ``Song``: Stores song metadata such as id, title, artist, album, genre, sharing user, share time, optional share note, tags, ratings, and listening events.
+        - ``ListeningEvent``: Records when a user listens to a song, supporting listening history and streak logic. Stores id, user_id, song_id, and when listened at.
+        - ``Rating``: Stores a user's 1-5 score for a song, with a unique constraint so each user can rate each song only once. Stores id, user_id, song_id, score, and when rated at.
+        - ``Playlist``: Stores user-created playlists with id, name, creating user, creation time, collaborative status, and associated songs through ``playlist_entries``. 
+        - ``Notification``: Stores notifications with id, user_id, notification_type, body text, creation time, and read status.
+    - Association Tables
+        - ``friendships``: A many-to-many table connecting users to other users as friends.
+        - ``song_tags``: A many-to-many table connecting songs with reusable tag records.
+        - ``playlist_entries``: A many-to-many table connecting playlists and songs while also storing playlist order, who added each song, and when it was added.
+- ``seed_data.py``: The script to populate the data tables defined above for initial data.
+- Services
+    - ``feed_service.py``: Contains the functions for querying social feed features. It queries users, friendships, songs, and listening events to build feed responses.
+        - ``get_friends_listening_now(user_id)``: Finds the user's friends, checks which friends have listened within the recent 24-hour threshold, and returns each friend's most recent listening activity.
+        - ``get_activity_feed(user_id, limit=20)``: Returns a general friend activity feed with the most recent listening events from all of the user's friends.
+    - ``notification_service.py``: Handles notification creation and retrieval. Notifications are made when a friend interacts with a user's shared song.
+        - ``create_notification(user_id, notification_type, body)``: Creates and saves a notification for a user.
+        - ``add_to_playlist(playlist_id, song_id, added_by_user_id)``: Adds a song to a playlist and notifies the original song sharer when someone else adds their song.
+        - ``rate_song(user_id, song_id, score)``: Validates a 1-5 song rating, creates a new rating or updates an existing one, and saves it.
+        - ``get_notifications(user_id, unread_only=False)``: Returns a user's notifications, optionally filtering to unread notifications only.
+        - ``mark_as_read(notification_id)``: Marks a notification as read.
+    - ``playlist_service.py``: Handles playlist creation and playlist lookup.
+        - ``create_playlist(name, created_by_user_id, is_collaborative=True)``: Validates the creator user and creates a playlist.
+        - ``get_playlist_songs(playlist_id)``: Returns the songs in a playlist ordered by their playlist position.
+        - ``get_playlist(playlist_id)``: Returns playlist metadata without the song list.
+        - ``get_user_playlists(user_id)``: Returns all playlists created by a specific user.
+    - ``search_service.py``: Handles song searching
+        - ``search_songs(query)``: Searches songs by title or artist using case-insensitive matching and returns song results.
+        - ``get_song(song_id)``: Searches one song by id and returns its details.
+    - ``streak_service.py``: Handles listening event recording and user listening streak logic.
+        - ``update_listening_streak(user, now)``: Applies the streak rules based on the user's last listening date.
+        - ``record_listening_event(user_id, song_id)``: Creates a listening event for a user/song pair and updates the user's listening streak.
+        - ``get_streak(user_id)``: Returns a user's current listening streak.
+- Routes
+    - ``feed.py``: Defines feed-related API endpoints. Connects to ``feed_service.py``.
+        - ``listening_now(user_id)``: Handles ``GET /feed/<user_id>/listening-now`` by calling ``get_friends_listening_now`` and returning recent friend listening activity plus a count.
+        - ``activity(user_id)``: Handles ``GET /feed/<user_id>/activity`` by calling ``get_activity_feed`` and returning the user's broader friend activity feed plus a count.
+    - ``playlists.py``: Defines playlist API endpoints. Connects to ``playlist_service.py`` for playlist operations and ``notification_service.py`` when adding songs.
+        - ``create()``: Handles ``POST /playlists/`` by validating playlist name and creator id, then calling ``create_playlist``.
+        - ``get_detail(playlist_id)``: Handles ``GET /playlists/<playlist_id>`` by calling ``get_playlist`` to return playlist metadata.
+        - ``get_songs(playlist_id)``: Handles ``GET /playlists/<playlist_id>/songs`` by calling ``get_playlist_songs`` to return the playlist's songs.
+        - ``add_song(playlist_id)``: Handles ``POST /playlists/<playlist_id>/songs`` by validating song id and adding user id, then calling ``add_to_playlist``.
+    - ``songs.py``: Defines song API endpoints. Connects to ``search_service.py`` for search/detail lookup, ``notification_service.py`` for ratings, and ``streak_service.py`` for listens.
+        - ``search()``: Handles ``GET /songs/search`` by requiring a ``q`` query parameter, calling ``search_songs``, and returning matching songs plus a count.
+        - ``get_song_detail(song_id)``: Handles ``GET /songs/<song_id>`` by calling ``get_song``.
+        - ``rate(song_id)``: Handles ``POST /songs/<song_id>/rate`` by validating ``user_id`` and ``score``, then calling ``rate_song``.
+        - ``listen(song_id)``: Handles ``POST /songs/<song_id>/listen`` by validating ``user_id``, then calling ``record_listening_event``.
+    - ``users.py``: Defines user API endpoints. Connects directly to the ``User`` model for profile lookup, ``streak_service.py`` for streaks, and ``notification_service.py`` for notifications.
+        - ``get_user(user_id)``: Handles ``GET /users/<user_id>`` by looking up a user through SQLAlchemy and returning serialized profile data.
+        - ``streak(user_id)``: Handles ``GET /users/<user_id>/streak`` by calling ``get_streak``.
+        - ``notifications(user_id)``: Handles ``GET /users/<user_id>/notifications`` by calling ``get_notifications`` and supporting ``unread_only=true``.
+        - ``read_notification(notification_id)``: Handles ``POST /users/notifications/<notification_id>/read`` by calling ``mark_as_read``.
+
+### Example Data Flow
+- A user listens to a song: client sends request ``POST /songs/<song_id>/listen`` in ``routes/songs.py`` which calls ``streak_service.record_listening_event(user_id, song_id)`` from ``services/streak_service.py``. This creates a ``ListeningEvent`` record that stores which user (``user_id``) listened to which song (``song_id``) at what time (``listened_at``).
