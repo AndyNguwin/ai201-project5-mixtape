@@ -176,3 +176,5 @@ else:
     - Although I disagree that it shouldn't cross over into the previous day and should only check for a 30 minute-window, I added to filter for only listening activity on the same day.
 - What related functionality did you check afterward to confirm you didn't break anything?
     - Tested the ``GET http://127.0.0.1:5000/feed/<user_id>/listening-now`` endpoint again to check whether the recent listening now activity still showed activity in the 24 hour window and previous day, which none appeared.
+
+## Git Log, Fix Commits
