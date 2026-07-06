@@ -66,7 +66,6 @@
 ## Bug Investigation Writeups
 
 ### Issue 1: My listening streak keeps resetting
-- 
 
 #### Reproduction
 - What inputs, sequence of actions, or data condition triggered the behavior?
@@ -149,22 +148,31 @@ else:
 - What related functionality did you check afterward to confirm you didn't break anything?
     - I tested each playlist again with the ``GET http://127.0.0.1:5000/playlists/<playlist_id>/songs`` endpoint, checking both the count and the last song in the return list. They each returned the correct count of 7 and their respective last songs.
 
-### Issue 3:
+### Issue 2: Friends Listening Now shows people from yesterday
 
 #### Reproduction
-- What steps did you take to confirm the bug exists before touching any code?
 - What inputs, sequence of actions, or data condition triggered the behavior?
+    - The seeded information of user ids, user friendship relationships and last listened state
+    - ``GET http://127.0.0.1:5000/feed/<user_id>/listening-now``
+- What steps did you take to confirm the bug exists before touching any code?
+    1. Ran a command to get Flask app's "now" with ``datetime.now(timezone.utc)`` since results will be in UTC timezone (different from my actual timezone) and need a time to compare results to.
+    2. Ran ``GET http://127.0.0.1:5000/feed/<user_id>/listening-now``, specifically with Kenji's and Nova's (users) ids.
+    3. Found a friend's listening activity that was the previous day (Nova).
 
 #### Finding the Root Cause
-- Which files did you look at?
-- What was your navigation path?
+- Which files did you look at? What was your navigation path?
+    1. ``routes/feed.py`` to find the endpoint that checks for listening now activity from friends (``GET http://127.0.0.1:5000/feed/<user_id>/listening-now``)
+    2. ``services/feed_service.py`` which contains the function ``feed_service.get_friends_listening_now()`` called by the endpoint.
+
 - What moment made you confident you'd found the right place, not just a suspicious area, but the specific cause?
+    - After reaching the service layer and inspecting the implementation of ``feed_service.get_friends_listening_now()``, I saw that the cutoff is 24 hours before the current time. The threshold is way too long to be considered "listening now" and also it's possible that 24 hours from the current time crosses into the day before.
 
 #### Root Cause
-- In plain English, explain exactly what was wrong.
-- Do not just say "there was a bug in the streak logic"; explain the specific condition, comparison, or missing step that caused the problem.
+- In ``feed_service.get_friends_listening_now()``, the threshold cutoff or window size of 24 hours is way too long to be considered "listening now". It's also possible that 24 hours from the current time crosses into the day before.
 
 #### Fix & Side-Effect Check
-- What did you change?
-- Why does that change fix the root cause?
+- What did you change? Why does that change fix the root cause?
+    - Rather than a 24 hour window, I reduced the window to be 30 minutes for a more accurate display of "listening now" and recency.
+    - Although I disagree that it shouldn't cross over into the previous day and should only check for a 30 minute-window, I added to filter for only listening activity on the same day.
 - What related functionality did you check afterward to confirm you didn't break anything?
+    - Tested the ``GET http://127.0.0.1:5000/feed/<user_id>/listening-now`` endpoint again to check whether the recent listening now activity still showed activity in the 24 hour window and previous day, which none appeared.
