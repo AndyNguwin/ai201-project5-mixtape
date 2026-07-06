@@ -109,28 +109,45 @@ else:
 - Why does that change fix the root cause?
     -  The streak should increase on every day of the week, including Sunday.
 - What related functionality did you check afterward to confirm you didn't break anything?
+    - I reran the test cases to ensure the streak was correctly incremented.
     - I added two tests to make sure the simple cases of adding a listening event for a new User with ``streak_service.record_listening_event()``, which calls ``streak_service.update_listening_streak()`` still correctly increases the streak to 1 and calling it on the same day doesn't duplicate the increase.
     - It's not possible to test with specific datetimes for ``streak_service.record_listening_event()`` as it grabs the datetime to pass into the streak updating function from the system time rather than getting it as input.
     
-### Issue 2:  
+### Issue 5: The last song in a playlist never shows up  
 
 #### Reproduction
-- What steps did you take to confirm the bug exists before touching any code?
 - What inputs, sequence of actions, or data condition triggered the behavior?
+    - The seeded playlists with 7 songs each
+    - Any playlist with one or more songs triggers the behavior
+    - ``GET /playlists/<playlist_id>/songs`` triggers this behavior
+
+- What steps did you take to confirm the bug exists before touching any code?
+    1. I inspected the seed data script to see how many songs were added into playlists (each had 7)
+    2. I queried for the playlist ids that are in the database
+    3. I made a ``GET http://127.0.0.1:5000/playlists/<playlist_id>/songs`` to get details of how many songs are returned back (only 6)
+    4. To confirm it was the last song that is being left out, I created a script to get all the songs in each playlist from the database ordered by insertion.
+    5. I cross-referenced the list of songs from the query script with the list returned from the ``GET http://127.0.0.1:5000/playlists/<playlist_id>/songs`` endpoint and confirmed that the last song was always left out.
+    6. With knowledge on how I handled the first issue, I also inspected the ``tests\test_playlists.py``, which has a test case failing because the expected result included the last song but not in the actual result.
 
 #### Finding the Root Cause
-- Which files did you look at?
-- What was your navigation path?
+- Which files did you look at? What was your navigation path?
+    1. ``routes/playlists.py`` to look for the function connected to endpoint ``GET http://127.0.0.1:5000/playlists/<playlist_id>/songs``
+    2. ``services/playlist_service.py`` since the endpoint calls ``playlist_service.get_playlist_songs()``.
+    3. ``tests\test_playlists.py`` to check if the same ``playlist_service.get_playlist_songs()`` is called for the failed test case.
 - What moment made you confident you'd found the right place, not just a suspicious area, but the specific cause?
+    - I was confident I found the right place when both the endpoint and the failed test case called the same function in the same file. Anything that fails at that endpoint should be expected to have failed at the service layer since the endpoint just provides input and output, which were correct. After inspecting the function, I found the bug.
 
 #### Root Cause
-- In plain English, explain exactly what was wrong.
-- Do not just say "there was a bug in the streak logic"; explain the specific condition, comparison, or missing step that caused the problem.
+- In ``services/playlist_service.py``, specifically the function ``playlist_service.get_playlist_songs()``, the final list cuts off the last song. 
+- ```python return [song.to_dict() for song in songs[:-1]]``` means it creates a list of JSONs that represent the songs, but only up to the last song and not including it. The ```python for song in songs[:-1]``` means it goes through all of songs up to the last song since ranges in Python are not inclusive at the upper bound or stopping target. The last song is sliced off.
 
 #### Fix & Side-Effect Check
 - What did you change?
+    - I removed the ``[-1]`` in ``songs[-1]`` to make the line read as ```python return [song.to_dict() for song in songs]```.
 - Why does that change fix the root cause?
+    - The final result goes through all of the songs in the list rather than slicing off the last song as the stop target. Specifying a stop target means it will not be included, so removing the stop target allows for all of the songs to be added.
 - What related functionality did you check afterward to confirm you didn't break anything?
+    - I tested each playlist again with the ``GET http://127.0.0.1:5000/playlists/<playlist_id>/songs`` endpoint, checking both the count and the last song in the return list. They each returned the correct count of 7 and their respective last songs.
 
 ### Issue 3:
 
